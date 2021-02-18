@@ -1,0 +1,12 @@
+<f:layout name="Login"/>
+
+<f:section name="loginFormFields">
+    <f:if condition="{error}">
+        <f:then>
+            <div class="alert alert-danger">
+                {f:translate(key:'error.{error.code}', extensionName: 't3oidc', default:error.message)}
+            </div>
+        </f:then>
+    </f:if>
+    <input type="hidden" name="oidc-signin" value="1"/>
+</f:section>

@@ -7,6 +7,9 @@
 			<trans-unit id="oidc_identifier" resname="oidc_identifier">
 				<source>OpenID Connect identifier</source>
 			</trans-unit>
+			<trans-unit id="backend.login.switch.label" xml:space="preserve">
+				<source>Sign in with OpenID Connect</source>
+			</trans-unit>
 			<trans-unit id="error.1613676691" xml:space="preserve">
 				<source>HTTPS is required to be able to use OpenID Connect sign in</source>
 			</trans-unit>
