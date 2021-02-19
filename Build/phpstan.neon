@@ -5,3 +5,5 @@ parameters:
     - %currentWorkingDirectory%/Classes
     - %currentWorkingDirectory%/Tests
 
+  bootstrapFiles:
+    - PHPStan/constants.php
