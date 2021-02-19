@@ -19,6 +19,7 @@ namespace FSG\Oidc\LoginProvider;
 
 use FSG\Oidc\Error\ConfigurationException;
 use FSG\Oidc\Service\StatusService;
+use RuntimeException;
 use TYPO3\CMS\Backend\Controller\LoginController;
 use TYPO3\CMS\Backend\LoginProvider\LoginProviderInterface;
 use TYPO3\CMS\Core\Page\PageRenderer;
@@ -43,7 +44,11 @@ class OpenIDConnectSignInProvider implements LoginProviderInterface
 
         try {
             StatusService::isEnabled('BE');
-        } catch (ConfigurationException $e) {
+
+            if ($error = (int)GeneralUtility::_GP('error')) {
+                throw new RuntimeException('Processing exception', $error);
+            }
+        } catch (ConfigurationException | RuntimeException $e) {
             $view->assign('error', $e);
         }
     }

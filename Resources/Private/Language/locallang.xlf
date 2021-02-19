@@ -31,6 +31,10 @@
 			<trans-unit id="error.1613676696" xml:space="preserve">
 				<source>No userinfo endpoint is set. Check the manual for help</source>
 			</trans-unit>
+
+			<trans-unit id="error.1613752400" xml:space="preserve">
+				<source>The provided auth state did not match the expected value</source>
+			</trans-unit>
 		</body>
 	</file>
 </xliff>
