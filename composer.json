@@ -23,7 +23,8 @@
 	"require": {
 		"php": "^7.4",
 		"typo3/cms-core": "^9.5 || ^10.4",
-		"league/oauth2-client": "^2.0"
+		"league/oauth2-client": "^2.0",
+		"firebase/php-jwt": "^5.2"
 	},
 	"require-dev": {
 		"typo3/coding-standards": "^0.2.0",
@@ -56,6 +57,9 @@
 			"[ -f $HOME/.composer/vendor/bin/phar-composer ] || composer global require clue/phar-composer",
 			"if [ ! -f Libraries/league-oauth2-client.phar ]; then cd Libraries/temp && composer require league/oauth2-client=^2.0 && composer config classmap-authoritative true && composer config prepend-autoloader false && composer dump-autoload; fi",
 			"[ -f Libraries/league-oauth2-client.phar ] || $HOME/.composer/vendor/bin/phar-composer build Libraries/temp/ Libraries/league-oauth2-client.phar",
+			"rm -rf Libraries/temp/*",
+			"if [ ! -f Libraries/firefase-php-jwt.phar ]; then cd Libraries/temp && composer require firebase/php-jwt=^5.2 && composer config classmap-authoritative true && composer config prepend-autoloader false && composer dump-autoload; fi",
+			"[ -f Libraries/firefase-php-jwt.phar ] || $HOME/.composer/vendor/bin/phar-composer build Libraries/temp/ Libraries/firefase-php-jwt.phar",
 			"chmod -x Libraries/*.phar",
 			"rm -rf Libraries/temp"
 		],
