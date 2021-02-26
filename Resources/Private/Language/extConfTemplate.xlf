@@ -31,6 +31,12 @@
 			<trans-unit id="endpoint.logout" resname="endpoint.logout">
 				<source>Logout endpoint</source>
 			</trans-unit>
+			<trans-unit id="endpoint.jwks" resname="endpoint.jwks">
+				<source>Json Web Keys (JWKs) endpoint</source>
+			</trans-unit>
+			<trans-unit id="idTokenSigningAlgorithm" resname="idTokenSigningAlgorithm">
+				<source>id_token signing algorithm</source>
+			</trans-unit>
 
 			<trans-unit id="enableBackendAuthentication" resname="enableBackendAuthentication">
 				<source>Backend Authentication : Enable OpenID Connect authentication for the backend.</source>

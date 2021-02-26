@@ -33,3 +33,9 @@ endpointUserInfo =
 
 # cat=advanced/endpoint/4; type=string; label=LLL:EXT:t3oidc/Resources/Private/Language/extConfTemplate.xlf:endpoint.logout
 endpointLogout =
+
+# cat=advanced/endpoint/5; type=string; label=LLL:EXT:t3oidc/Resources/Private/Language/extConfTemplate.xlf:endpoint.jwks
+endpointJwks =
+
+# cat=advanced//1; type=string; label=LLL:EXT:t3oidc/Resources/Private/Language/extConfTemplate.xlf:endpoint.idTokenSigningAlgorithm
+idTokenSigningAlgorithm =

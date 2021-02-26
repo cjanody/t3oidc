@@ -61,6 +61,16 @@ class ExtensionConfiguration implements SingletonInterface
     protected string $endpointLogout = '';
 
     /**
+     * @var string
+     */
+    protected string $endpointJwks = '';
+
+    /**
+     * @var string
+     */
+    protected string $idTokenSigningAlgorithm = '';
+
+    /**
      * @var bool
      */
     protected bool $enableBackendAuthentication = false;
@@ -150,6 +160,22 @@ class ExtensionConfiguration implements SingletonInterface
     public function getEndpointLogout(): string
     {
         return $this->endpointLogout;
+    }
+
+    /**
+     * @return string
+     */
+    public function getEndpointJwks(): string
+    {
+        return $this->endpointJwks;
+    }
+
+    /**
+     * @return string
+     */
+    public function getIdTokenSigningAlgorithm(): string
+    {
+        return $this->idTokenSigningAlgorithm;
     }
 
     /**
