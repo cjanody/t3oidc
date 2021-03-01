@@ -22,6 +22,14 @@ use FSG\Oidc\Domain\Model\Dto\ExtensionConfiguration;
 use FSG\Oidc\Error\InvalidStateException;
 use League\OAuth2\Client\Provider\Exception\IdentityProviderException;
 use League\OAuth2\Client\Provider\GenericProvider;
+use League\OAuth2\Client\Token\AccessToken;
+use TYPO3\CMS\Core\Database\ConnectionPool;
+use TYPO3\CMS\Core\Database\Query\Restriction\DefaultRestrictionContainer;
+use TYPO3\CMS\Core\Database\Query\Restriction\DeletedRestriction;
+use TYPO3\CMS\Core\Database\Query\Restriction\EndTimeRestriction;
+use TYPO3\CMS\Core\Database\Query\Restriction\HiddenRestriction;
+use TYPO3\CMS\Core\Database\Query\Restriction\QueryRestrictionContainerInterface;
+use TYPO3\CMS\Core\Database\Query\Restriction\StartTimeRestriction;
 use TYPO3\CMS\Core\Session\Backend\Exception\SessionNotCreatedException;
 use TYPO3\CMS\Core\Session\Backend\Exception\SessionNotFoundException;
 use TYPO3\CMS\Core\Session\Backend\Exception\SessionNotUpdatedException;
@@ -63,10 +71,12 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
     /**
      * Finds a user.
      *
+     * @return array<string, mixed>|null
      * @throws Exception
      */
-    public function getUser(): void
+    public function getUser(): ?array
     {
+        $user = null;
         if (GeneralUtility::_GP('oidc-signin')) {
             $this->authenticateUser();
         } elseif ($providedState = GeneralUtility::_GP('state')) {
@@ -82,13 +92,43 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
                 }
 
                 if ($code = GeneralUtility::_GP('code')) {
-                    $accessToken = $this->getOAuthClient()->getAccessToken('authorization_code', ['code' => $code]);
+                    /**
+                     * @var AccessToken $accessToken
+                     */
+                    $accessToken   = $this->getOAuthClient()->getAccessToken('authorization_code', ['code' => $code]);
+                    $resourceOwner = $this->getOAuthClient()->getResourceOwner($accessToken)->toArray();
+
+                    $queryBuilder      = GeneralUtility::makeInstance(ConnectionPool::class)
+                                                       ->getQueryBuilderForTable($this->db_user['table']);
+                    $expressionBuilder = $queryBuilder->expr();
+
+                    $dbUser = array_merge(
+                        $this->db_user,
+                        [
+                            'username_column' => 'oidc_identifier',
+                            'enable_clause'   => $this->userConstraints()
+                                                      ->buildExpression(
+                                                          [
+                                                              $this->db_user['table'] => $this->db_user['table'],
+                                                          ],
+                                                          $expressionBuilder
+                                                      ),
+                        ]
+                    );
+
+                    if (!($user = $this->fetchUserRecord($resourceOwner['sub'], '', $dbUser))
+                        && !$this->extensionConfiguration->isBackendUserMustExistLocally()) {
+                        // create local user
+                    } elseif ($user['disable'] == 1 || $user['deleted'] == 1) {
+                        // In case user was disabled or deleted, reset it
+                    }
                 }
             } catch (SessionNotFoundException | InvalidStateException | IdentityProviderException $e) {
                 $this->logger->error($e->getMessage());
                 HttpUtility::redirect($this->getCallbackUrl($e->getCode()));
             }
         }
+        return $user;
     }
 
     /**
@@ -149,5 +189,32 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
             $callback .= '/typo3/?' . (!is_null($error) ? 'error=' . $error : 'login_status=login');
         }
         return $callback;
+    }
+
+    /**
+     * This returns the restrictions needed to select the user respecting
+     * enable columns and flags like deleted, hidden, starttime, endtime
+     * and rootLevel
+     *
+     * @return QueryRestrictionContainerInterface
+     */
+    protected function userConstraints(): QueryRestrictionContainerInterface
+    {
+        $restrictionContainer = GeneralUtility::makeInstance(DefaultRestrictionContainer::class);
+
+        $restrictionContainer->removeByType(StartTimeRestriction::class);
+        $restrictionContainer->removeByType(EndTimeRestriction::class);
+
+        if ($this->mode == 'BE') {
+            if ($this->extensionConfiguration->isReEnableBackendUsers()) {
+                $restrictionContainer->removeByType(HiddenRestriction::class);
+            }
+
+            if ($this->extensionConfiguration->isUnDeleteBackendUsers()) {
+                $restrictionContainer->removeByType(DeletedRestriction::class);
+            }
+        }
+
+        return $restrictionContainer;
     }
 }
