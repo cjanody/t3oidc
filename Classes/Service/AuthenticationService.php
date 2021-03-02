@@ -35,6 +35,9 @@ use TYPO3\CMS\Core\Session\Backend\Exception\SessionNotFoundException;
 use TYPO3\CMS\Core\Session\Backend\Exception\SessionNotUpdatedException;
 use TYPO3\CMS\Core\Session\Backend\SessionBackendInterface;
 use TYPO3\CMS\Core\Session\SessionManager;
+use TYPO3\CMS\Core\SysLog\Action\Login as SystemLogLoginAction;
+use TYPO3\CMS\Core\SysLog\Error as SystemLogErrorClassification;
+use TYPO3\CMS\Core\SysLog\Type as SystemLogType;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Core\Utility\HttpUtility;
 
@@ -76,10 +79,31 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
      */
     public function getUser(): ?array
     {
-        $user = null;
+        $this->manageAuthentication();
+        return $this->manageCallback();
+    }
+
+    /**
+     * Manage the authentication process
+     *
+     * @throws SessionNotCreatedException
+     * @throws SessionNotUpdatedException
+     */
+    protected function manageAuthentication(): void
+    {
         if (GeneralUtility::_GP('oidc-signin')) {
             $this->authenticateUser();
-        } elseif ($providedState = GeneralUtility::_GP('state')) {
+        }
+    }
+
+    /**
+     * Manage the callback process
+     *
+     * @return array<string, mixed>|null
+     */
+    protected function manageCallback(): ?array
+    {
+        if ($providedState = GeneralUtility::_GP('state')) {
             try {
                 $expectedState = $this->session->get('t3oidcOAuthState')['ses_data'];
                 $this->session->remove('t3oidcOAuthState');
@@ -122,13 +146,14 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
                     } elseif ($user['disable'] == 1 || $user['deleted'] == 1) {
                         // In case user was disabled or deleted, reset it
                     }
+                    return $user;
                 }
             } catch (SessionNotFoundException | InvalidStateException | IdentityProviderException $e) {
                 $this->logger->error($e->getMessage());
                 HttpUtility::redirect($this->getCallbackUrl($e->getCode()));
             }
         }
-        return $user;
+        return null;
     }
 
     /**
@@ -216,5 +241,62 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
         }
 
         return $restrictionContainer;
+    }
+
+    /**
+     * @param array<string, mixed> $user
+     *
+     * @return int
+     */
+    public function authUser(array $user): int
+    {
+        if (!isset($user['oidc_identifier']) || (string)$user['oidc_identifier'] === '') {
+            return 100;
+        }
+
+        $queriedDomain   = $this->authInfo['HTTP_HOST'];
+        $isDomainLockMet = false;
+
+        if (empty($user['lockToDomain'])) {
+            // No domain restriction set for user in db. This is ok.
+            $isDomainLockMet = true;
+        } elseif (!strcasecmp($user['lockToDomain'], $queriedDomain)) {
+            // Domain restriction set and it matches given host. Ok.
+            $isDomainLockMet = true;
+        }
+
+        if (!$isDomainLockMet) {
+            // Password ok, but configured domain lock not met
+            $errorMessage = 'Login-attempt from ###IP###, username \'%s\', locked domain \'%s\' did not match \'%s\'!';
+            $this->writeLogMessage(
+                $errorMessage,
+                $user[$this->db_user['username_column']],
+                $user['lockToDomain'],
+                $queriedDomain
+            );
+            $this->writelog(
+                SystemLogType::LOGIN,
+                SystemLogLoginAction::ATTEMPT,
+                SystemLogErrorClassification::SECURITY_NOTICE,
+                1,
+                $errorMessage,
+                [$user[$this->db_user['username_column']], $user['lockToDomain'], $queriedDomain]
+            );
+            $this->logger->info(sprintf(
+                $errorMessage,
+                $user[$this->db_user['username_column']],
+                $user['lockToDomain'],
+                $queriedDomain
+            ));
+            // Responsible, authentication ok, but domain lock not ok, do NOT check other services
+            return 0;
+        }
+
+        // Responsible, authentication ok, domain lock ok. Log successful login and return 'auth ok, do NOT check other services'
+        $this->writeLogMessage(
+            $this->pObj->loginType . ' Authentication successful for username \'%s\'',
+            $user['username']
+        );
+        return 200;
     }
 }
