@@ -81,6 +81,11 @@ class ExtensionConfiguration implements SingletonInterface
     protected bool $unDeleteBackendUsers = false;
 
     /**
+     * @var string
+     */
+    protected string $tokenUserIdentifier = '';
+
+    /**
      * ExtensionConfiguration constructor.
      */
     public function __construct()
@@ -182,5 +187,13 @@ class ExtensionConfiguration implements SingletonInterface
     public function isUnDeleteBackendUsers(): bool
     {
         return $this->unDeleteBackendUsers;
+    }
+
+    /**
+     * @return string
+     */
+    public function getTokenUserIdentifier(): string
+    {
+        return $this->tokenUserIdentifier;
     }
 }

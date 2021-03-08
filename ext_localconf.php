@@ -12,12 +12,13 @@ defined('TYPO3_MODE') || die();
         FSG\Oidc\Domain\Model\Dto\ExtensionConfiguration::class
     );
 
-    $subTypes = [];
+    $subTypes      = [];
+    $loginProvider = FSG\Oidc\LoginProvider\OpenIDConnectSignInProvider::LOGIN_PROVIDER;
     if ((bool)$settings->isEnableBackendAuthentication()) {
         $subTypes[] = 'getUserBE';
         $subTypes[] = 'authUserBE';
 
-        $GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['backend']['loginProviders'][1613676682] = [
+        $GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['backend']['loginProviders'][$loginProvider] = [
             'provider'   => \FSG\Oidc\LoginProvider\OpenIDConnectSignInProvider::class,
             'sorting'    => 75,
             'icon-class' => 'fa-openid',
@@ -32,15 +33,15 @@ defined('TYPO3_MODE') || die();
         'auth',
         \FSG\Oidc\Service\AuthenticationService::class,
         [
-            'title' => 'LLL:EXT:t3oidc/Resources/Private/Language/locallang.xlf:authentication.service',
+            'title'       => 'LLL:EXT:t3oidc/Resources/Private/Language/locallang.xlf:authentication.service',
             'description' => 'Authentication service for OpenID Connect.',
-            'subtype' => $subTypes,
-            'available' => true,
-            'priority' => 75,
-            'quality' => 75,
-            'os' => '',
-            'exec' => '',
-            'className' => \FSG\Oidc\Service\AuthenticationService::class,
+            'subtype'     => $subTypes,
+            'available'   => true,
+            'priority'    => 75,
+            'quality'     => 75,
+            'os'          => '',
+            'exec'        => '',
+            'className'   => \FSG\Oidc\Service\AuthenticationService::class,
         ]
     );
 

@@ -76,6 +76,10 @@ class StatusService
             throw new ConfigurationException('No userinfo endpoint is set', 1613676697);
         }
 
+        if (!$extensionConfiguration->getTokenUserIdentifier()) {
+            throw new ConfigurationException('No token user identifier is set', 1613676698);
+        }
+
         if ($mode === 'BE') {
             return $extensionConfiguration->isEnableBackendAuthentication();
         }

@@ -34,6 +34,84 @@ class StatusServiceTest extends UnitTestCase
     }
 
     /**
+     * Initialize TYPO3 request to run tests
+     *
+     * @param bool $https
+     */
+    private function initializeRequest(bool $https = true): void
+    {
+        $GLOBALS['TYPO3_REQUEST'] = $this->request->withAttribute(
+            'normalizedParams',
+            new NormalizedParams(['HTTPS' => $https], [], '', '')
+        );
+    }
+
+    /**
+     * Test if the backend authentication is disabled by default
+     *
+     * @test
+     */
+    public function expectFalseForIsEnableBackendAuthentication(): void
+    {
+        $this->initializeRequest();
+
+        $settings = [
+            'clientId'            => 'foo',
+            'clientSecret'        => 'bar',
+            'clientScopes'        => 'foo',
+            'endpointAuthorize'   => 'bar',
+            'endpointToken'       => 'foo',
+            'endpointUserInfo'    => 'bar',
+            'tokenUserIdentifier' => 'foo',
+        ];
+
+        $extensionConfigurationMock = $this->getAccessibleMock(ExtensionConfiguration::class, ['dummy'], [], '', false);
+        foreach ($settings as $key => $value) {
+            $extensionConfigurationMock->_set($key, $value);
+        }
+
+        /**
+         * @var ExtensionConfiguration $extensionConfigurationMock
+         */
+        GeneralUtility::setSingletonInstance(ExtensionConfiguration::class, $extensionConfigurationMock);
+
+        self::assertFalse(StatusService::isEnabled('BE'));
+    }
+
+    /**
+     * Test if the backend authentication is disabled by default
+     *
+     * @test
+     */
+    public function expectTrueForIsEnableBackendAuthentication(): void
+    {
+        $this->initializeRequest();
+
+        $settings = [
+            'clientId'                    => 'foo',
+            'clientSecret'                => 'bar',
+            'clientScopes'                => 'foo',
+            'endpointAuthorize'           => 'bar',
+            'endpointToken'               => 'foo',
+            'endpointUserInfo'            => 'bar',
+            'tokenUserIdentifier'         => 'foo',
+            'enableBackendAuthentication' => true,
+        ];
+
+        $extensionConfigurationMock = $this->getAccessibleMock(ExtensionConfiguration::class, ['dummy'], [], '', false);
+        foreach ($settings as $key => $value) {
+            $extensionConfigurationMock->_set($key, $value);
+        }
+
+        /**
+         * @var ExtensionConfiguration $extensionConfigurationMock
+         */
+        GeneralUtility::setSingletonInstance(ExtensionConfiguration::class, $extensionConfigurationMock);
+
+        self::assertTrue(StatusService::isEnabled('BE'));
+    }
+
+    /**
      * Test if the right exception is thrown for an invalid mode
      *
      * @test
@@ -51,10 +129,7 @@ class StatusServiceTest extends UnitTestCase
      */
     public function expectExceptionForNoneHTTPSEnvironment(): void
     {
-        $GLOBALS['TYPO3_REQUEST'] = $this->request->withAttribute(
-            'normalizedParams',
-            new NormalizedParams([], [], '', '')
-        );
+        $this->initializeRequest(false);
 
         $this->expectException(HTTPSConnectionException::class);
         $this->expectExceptionCode(1613676691);
@@ -68,18 +143,10 @@ class StatusServiceTest extends UnitTestCase
      */
     public function expectExceptionForNoClientIDConfigured(): void
     {
-        $GLOBALS['TYPO3_REQUEST'] = $this->request->withAttribute(
-            'normalizedParams',
-            new NormalizedParams(['HTTPS' => 1], [], '', '')
-        );
+        $this->initializeRequest();
 
         $settings = [
-            'clientId'          => '',
-            'clientSecret'      => 'bar',
-            'clientScopes'      => 'foo',
-            'endpointAuthorize' => 'bar',
-            'endpointToken'     => 'foo',
-            'endpointUserInfo'  => 'bar',
+            'clientId' => '',
         ];
 
         $extensionConfigurationMock = $this->getAccessibleMock(ExtensionConfiguration::class, ['dummy'], [], '', false);
@@ -104,18 +171,11 @@ class StatusServiceTest extends UnitTestCase
      */
     public function expectExceptionForNoClientSecretConfigured(): void
     {
-        $GLOBALS['TYPO3_REQUEST'] = $this->request->withAttribute(
-            'normalizedParams',
-            new NormalizedParams(['HTTPS' => 1], [], '', '')
-        );
+        $this->initializeRequest();
 
         $settings = [
-            'clientId'          => 'foo',
-            'clientSecret'      => '',
-            'clientScopes'      => 'foo',
-            'endpointAuthorize' => 'bar',
-            'endpointToken'     => 'foo',
-            'endpointUserInfo'  => 'bar',
+            'clientId'     => 'foo',
+            'clientSecret' => '',
         ];
 
         $extensionConfigurationMock = $this->getAccessibleMock(ExtensionConfiguration::class, ['dummy'], [], '', false);
@@ -140,18 +200,12 @@ class StatusServiceTest extends UnitTestCase
      */
     public function expectExceptionForNoClientScopeConfigured(): void
     {
-        $GLOBALS['TYPO3_REQUEST'] = $this->request->withAttribute(
-            'normalizedParams',
-            new NormalizedParams(['HTTPS' => 1], [], '', '')
-        );
+        $this->initializeRequest();
 
         $settings = [
-            'clientId'          => 'foo',
-            'clientSecret'      => 'bar',
-            'clientScopes'      => '',
-            'endpointAuthorize' => 'bar',
-            'endpointToken'     => 'foo',
-            'endpointUserInfo'  => 'bar',
+            'clientId'     => 'foo',
+            'clientSecret' => 'bar',
+            'clientScopes' => '',
         ];
 
         $extensionConfigurationMock = $this->getAccessibleMock(ExtensionConfiguration::class, ['dummy'], [], '', false);
@@ -176,18 +230,13 @@ class StatusServiceTest extends UnitTestCase
      */
     public function expectExceptionForNoAuthorizeEndpointConfigured(): void
     {
-        $GLOBALS['TYPO3_REQUEST'] = $this->request->withAttribute(
-            'normalizedParams',
-            new NormalizedParams(['HTTPS' => 1], [], '', '')
-        );
+        $this->initializeRequest();
 
         $settings = [
             'clientId'          => 'foo',
             'clientSecret'      => 'bar',
             'clientScopes'      => 'foo',
             'endpointAuthorize' => '',
-            'endpointToken'     => 'foo',
-            'endpointUserInfo'  => 'bar',
         ];
 
         $extensionConfigurationMock = $this->getAccessibleMock(ExtensionConfiguration::class, ['dummy'], [], '', false);
@@ -212,10 +261,7 @@ class StatusServiceTest extends UnitTestCase
      */
     public function expectExceptionForNoTokenEndpointConfigured(): void
     {
-        $GLOBALS['TYPO3_REQUEST'] = $this->request->withAttribute(
-            'normalizedParams',
-            new NormalizedParams(['HTTPS' => 1], [], '', '')
-        );
+        $this->initializeRequest();
 
         $settings = [
             'clientId'          => 'foo',
@@ -223,7 +269,6 @@ class StatusServiceTest extends UnitTestCase
             'clientScopes'      => 'foo',
             'endpointAuthorize' => 'bar',
             'endpointToken'     => '',
-            'endpointUserInfo'  => 'bar',
         ];
 
         $extensionConfigurationMock = $this->getAccessibleMock(
@@ -254,10 +299,7 @@ class StatusServiceTest extends UnitTestCase
      */
     public function expectExceptionForNoUserInfoEndpointConfigured(): void
     {
-        $GLOBALS['TYPO3_REQUEST'] = $this->request->withAttribute(
-            'normalizedParams',
-            new NormalizedParams(['HTTPS' => 1], [], '', '')
-        );
+        $this->initializeRequest();
 
         $settings = [
             'clientId'          => 'foo',
@@ -280,6 +322,40 @@ class StatusServiceTest extends UnitTestCase
 
         $this->expectException(ConfigurationException::class);
         $this->expectExceptionCode(1613676697);
+        StatusService::isEnabled('BE');
+    }
+
+    /**
+     * Test if the right exception code is return for no token user identifier configured
+     *
+     * @test
+     */
+    public function expectExceptionForNoTokenUserIdentifierConfigured(): void
+    {
+        $this->initializeRequest();
+
+        $settings = [
+            'clientId'            => 'foo',
+            'clientSecret'        => 'bar',
+            'clientScopes'        => 'foo',
+            'endpointAuthorize'   => 'bar',
+            'endpointToken'       => 'foo',
+            'endpointUserInfo'    => 'bar',
+            'tokenUserIdentifier' => '',
+        ];
+
+        $extensionConfigurationMock = $this->getAccessibleMock(ExtensionConfiguration::class, ['dummy'], [], '', false);
+        foreach ($settings as $key => $value) {
+            $extensionConfigurationMock->_set($key, $value);
+        }
+
+        /**
+         * @var ExtensionConfiguration $extensionConfigurationMock
+         */
+        GeneralUtility::setSingletonInstance(ExtensionConfiguration::class, $extensionConfigurationMock);
+
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionCode(1613676698);
         StatusService::isEnabled('BE');
     }
 }

@@ -7,6 +7,59 @@
                 {f:translate(key:'error.{error.code}', extensionName: 't3oidc', default:error.message)}
             </div>
         </f:then>
+        <f:else>
+            <f:if condition="{oidcError}">
+                <f:then>
+                    <div class="alert alert-danger">
+                        <strong>{oidcError}</strong> {oidcErrorDescription}
+                    </div>
+                </f:then>
+                <f:else>
+                    <f:if condition="{code}">
+                        <div class="alert alert-success">
+                            <strong>
+                                <f:translate
+                                    key="LLL:EXT:t3oidc/Resources/Private/Language/locallang.xlf:form.logged-in.success.title"/>
+                            </strong>
+                            <f:translate
+                                key="LLL:EXT:t3oidc/Resources/Private/Language/locallang.xlf:form.logged-in.success.description"/>
+                        </div>
+                    </f:if>
+                </f:else>
+            </f:if>
+
+            <f:if condition="{userInfo}">
+                <f:then>
+                    <p class="info text-center">
+                        <f:translate key="LLL:EXT:t3oidc/Resources/Private/Language/locallang.xlf:form.logged-in-as"/>
+                        <strong>{userInfo.name}</strong>
+                    </p>
+                    <div class="form-group" id="t3-login-submit-section">
+                        <button class="btn btn-block btn-login t3js-login-submit" id="t3-login-submit" type="submit"
+                                name="commandLI"
+                                data-loading-text="<i class='fa fa-circle-o-notch fa-spin'></i> {f:translate(key: 'login.process')}">
+                            <f:translate
+                                key="LLL:EXT:t3oidc/Resources/Private/Language/locallang.xlf:form.login.typo3"/>
+                        </button>
+                        <a class="btn btn-oidc btn-block btn-login"
+                           href="?loginProvider={loginProviderIdentifier}&oidc[action]=logout">
+                            <f:translate
+                                key="LLL:EXT:t3oidc/Resources/Private/Language/locallang.xlf:form.logout.oidc"/>
+                        </a>
+                    </div>
+                </f:then>
+                <f:else>
+                    <p class="info text-center">
+                        {f:translate(key: 'LLL:EXT:t3oidc/Resources/Private/Language/locallang.xlf:form.not-logged-in')-> f:format.html()}
+                    </p>
+                    <div class="form-group">
+                        <a class="btn btn-block btn-oidc btn-login"
+                           href="/typo3/?loginProvider={loginProviderIdentifier}&oidc[action]=login">
+                            <f:translate key="LLL:EXT:t3oidc/Resources/Private/Language/locallang.xlf:form.login.oidc"/>
+                        </a>
+                    </div>
+                </f:else>
+            </f:if>
+        </f:else>
     </f:if>
-    <input type="hidden" name="oidc-signin" value="1"/>
 </f:section>

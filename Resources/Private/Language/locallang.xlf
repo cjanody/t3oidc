@@ -13,6 +13,28 @@
 			<trans-unit id="backend.login.switch.label" xml:space="preserve">
 				<source>Sign in with OpenID Connect</source>
 			</trans-unit>
+
+			<trans-unit id="form.logout.oidc">
+				<source>Log out from OpenID Connect</source>
+			</trans-unit>
+			<trans-unit id="form.login.oidc">
+				<source>Log in</source>
+			</trans-unit>
+			<trans-unit id="form.login.typo3">
+				<source>Log in to TYPO3</source>
+			</trans-unit>
+			<trans-unit id="form.logged-in-as">
+				<source>Hello</source>
+			</trans-unit>
+			<trans-unit id="form.not-logged-in">
+				<source><![CDATA[You are currently <strong>not</strong> logged in to authentication service.]]></source>
+			</trans-unit>
+			<trans-unit id="form.logged-in.success.title">
+				<source>Well done!</source>
+			</trans-unit>
+			<trans-unit id="form.logged-in.success.description">
+				<source>You have successfully logged in.</source>
+			</trans-unit>
 			<trans-unit id="error.1613676691" xml:space="preserve">
 				<source>HTTPS is required to be able to use OpenID Connect sign in</source>
 			</trans-unit>

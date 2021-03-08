@@ -1,5 +1,6 @@
 # customsubcategory=client=LLL:EXT:t3oidc/Resources/Private/Language/extConfTemplate.xlf:categories.client
 # customsubcategory=endpoint=LLL:EXT:t3oidc/Resources/Private/Language/extConfTemplate.xlf:categories.endpoint
+# customsubcategory=token=LLL:EXT:t3oidc/Resources/Private/Language/extConfTemplate.xlf:categories.token
 
 # cat=backend/enable/1; type=boolean; label=LLL:EXT:t3oidc/Resources/Private/Language/extConfTemplate.xlf:enableBackendAuthentication
 enableBackendAuthentication = 0
@@ -33,3 +34,6 @@ endpointUserInfo =
 
 # cat=advanced/endpoint/4; type=string; label=LLL:EXT:t3oidc/Resources/Private/Language/extConfTemplate.xlf:endpoint.logout
 endpointLogout =
+
+# cat=advanced/token/1; type=string; label=LLL:EXT:t3oidc/Resources/Private/Language/extConfTemplate.xlf:token.userIdentifier
+tokenUserIdentifier = sub

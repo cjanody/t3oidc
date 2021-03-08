@@ -17,29 +17,16 @@ namespace FSG\Oidc\Service;
  * The TYPO3 project - inspiring people to share!
  */
 
-use Exception;
 use FSG\Oidc\Domain\Model\Dto\ExtensionConfiguration;
-use FSG\Oidc\Error\InvalidStateException;
-use League\OAuth2\Client\Provider\Exception\IdentityProviderException;
-use League\OAuth2\Client\Provider\GenericProvider;
-use League\OAuth2\Client\Token\AccessToken;
-use TYPO3\CMS\Core\Database\ConnectionPool;
-use TYPO3\CMS\Core\Database\Query\Restriction\DefaultRestrictionContainer;
-use TYPO3\CMS\Core\Database\Query\Restriction\DeletedRestriction;
-use TYPO3\CMS\Core\Database\Query\Restriction\EndTimeRestriction;
-use TYPO3\CMS\Core\Database\Query\Restriction\HiddenRestriction;
-use TYPO3\CMS\Core\Database\Query\Restriction\QueryRestrictionContainerInterface;
-use TYPO3\CMS\Core\Database\Query\Restriction\StartTimeRestriction;
-use TYPO3\CMS\Core\Session\Backend\Exception\SessionNotCreatedException;
+use TYPO3\CMS\Core\Authentication\AbstractUserAuthentication;
+use TYPO3\CMS\Core\Authentication\LoginType;
 use TYPO3\CMS\Core\Session\Backend\Exception\SessionNotFoundException;
-use TYPO3\CMS\Core\Session\Backend\Exception\SessionNotUpdatedException;
 use TYPO3\CMS\Core\Session\Backend\SessionBackendInterface;
 use TYPO3\CMS\Core\Session\SessionManager;
 use TYPO3\CMS\Core\SysLog\Action\Login as SystemLogLoginAction;
 use TYPO3\CMS\Core\SysLog\Error as SystemLogErrorClassification;
 use TYPO3\CMS\Core\SysLog\Type as SystemLogType;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
-use TYPO3\CMS\Core\Utility\HttpUtility;
 
 /**
  * OpenID Connect authentication service.
@@ -52,14 +39,14 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
     protected ExtensionConfiguration $extensionConfiguration;
 
     /**
-     * @var GenericProvider
-     */
-    protected GenericProvider $oauthClient;
-
-    /**
      * @var SessionBackendInterface
      */
     private SessionBackendInterface $session;
+
+    /**
+     * @var array<string, string>
+     */
+    private array $userInfo = [];
 
     /**
      * AuthenticationService constructor.
@@ -72,175 +59,103 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
     }
 
     /**
-     * Finds a user.
-     *
-     * @return array<string, mixed>|null
-     * @throws Exception
+     * @param string                     $mode
+     * @param array<string, string>      $loginData
+     * @param array<string, string>      $authInfo
+     * @param AbstractUserAuthentication $pObj
+     */
+    public function initAuth($mode, $loginData, $authInfo, $pObj): void
+    {
+        parent::initAuth($mode, $loginData, $authInfo, $pObj);
+
+        $this->login['responsible'] = false;
+        if ($this->initializeUserInfo()) {
+            $this->login['status']      = 'login';
+            $this->login['responsible'] = true;
+            $this->handleLogin();
+        }
+    }
+
+    /**
+     * Initializes UserInfo if session exists
+     */
+    protected function initializeUserInfo(): bool
+    {
+        try {
+            if ($this->userInfo = unserialize($this->session->get('t3oidcOAuthUser')['ses_data'])) {
+                return true;
+            }
+        } catch (SessionNotFoundException $e) {
+            $this->logger->error(sprintf('Error %s: %s', $e->getCode(), $e->getMessage()));
+        }
+
+        return false;
+    }
+
+    protected function handleLogin(): void
+    {
+        if ($this->login['responsible'] === true) {
+            switch ($this->mode) {
+                case 'getUserFE':
+                case 'getUserBE':
+                    $this->logger->debug(sprintf('Process auth mode "%s".', $this->mode));
+                    // $this->insertOrUpdateUser();
+                    break;
+                case 'authUserFE':
+                case 'authUserBE':
+                    $this->logger->debug(sprintf('Skip auth mode "%s".', $this->mode));
+                    break;
+                default:
+                    $this->logger->notice(sprintf('Undefined mode "%s". Skip.', $this->mode));
+            }
+        }
+    }
+
+    /**
+     * @return array<string,string>|null
      */
     public function getUser(): ?array
     {
-        $this->manageAuthentication();
-        return $this->manageCallback();
-    }
-
-    /**
-     * Manage the authentication process
-     *
-     * @throws SessionNotCreatedException
-     * @throws SessionNotUpdatedException
-     */
-    protected function manageAuthentication(): void
-    {
-        if (GeneralUtility::_GP('oidc-signin')) {
-            $this->authenticateUser();
-        }
-    }
-
-    /**
-     * Manage the callback process
-     *
-     * @return array<string, mixed>|null
-     */
-    protected function manageCallback(): ?array
-    {
-        if ($providedState = GeneralUtility::_GP('state')) {
-            try {
-                $expectedState = $this->session->get('t3oidcOAuthState')['ses_data'];
-                $this->session->remove('t3oidcOAuthState');
-
-                if ($expectedState != $providedState) {
-                    throw new InvalidStateException(
-                        'The provided auth state did not match the expected value',
-                        1613752400
-                    );
-                }
-
-                if ($code = GeneralUtility::_GP('code')) {
-                    /**
-                     * @var AccessToken $accessToken
-                     */
-                    $accessToken   = $this->getOAuthClient()->getAccessToken('authorization_code', ['code' => $code]);
-                    $resourceOwner = $this->getOAuthClient()->getResourceOwner($accessToken)->toArray();
-
-                    $queryBuilder      = GeneralUtility::makeInstance(ConnectionPool::class)
-                                                       ->getQueryBuilderForTable($this->db_user['table']);
-                    $expressionBuilder = $queryBuilder->expr();
-
-                    $dbUser = array_merge(
-                        $this->db_user,
-                        [
-                            'username_column' => 'oidc_identifier',
-                            'enable_clause'   => $this->userConstraints()
-                                                      ->buildExpression(
-                                                          [
-                                                              $this->db_user['table'] => $this->db_user['table'],
-                                                          ],
-                                                          $expressionBuilder
-                                                      ),
-                        ]
-                    );
-
-                    if (!($user = $this->fetchUserRecord($resourceOwner['sub'], '', $dbUser))
-                        && !$this->extensionConfiguration->isBackendUserMustExistLocally()) {
-                        // create local user
-                    } elseif ($user['disable'] == 1 || $user['deleted'] == 1) {
-                        // In case user was disabled or deleted, reset it
-                    }
-                    return $user;
-                }
-            } catch (SessionNotFoundException | InvalidStateException | IdentityProviderException $e) {
-                $this->logger->error($e->getMessage());
-                HttpUtility::redirect($this->getCallbackUrl($e->getCode()));
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Initialize local session and redirect to the authentication service.
-     *
-     * @throws SessionNotCreatedException
-     * @throws SessionNotUpdatedException
-     */
-    protected function authenticateUser(): void
-    {
-        $authorizationUrl = $this->getOAuthClient()->getAuthorizationUrl();
-
-        try {
-            $this->session->get('t3oidcOAuthState');
-            $this->session->update('t3oidcOAuthState', ['ses_data' => $this->getOAuthClient()->getState()]);
-        } catch (SessionNotFoundException $e) {
-            $this->session->set('t3oidcOAuthState', ['ses_data' => $this->getOAuthClient()->getState()]);
+        if ($this->login['status'] !== LoginType::LOGIN
+            || $this->login['responsible'] === false
+            || !isset($this->userInfo[$this->extensionConfiguration->getTokenUserIdentifier()])) {
+            return null;
         }
 
-        HttpUtility::redirect($authorizationUrl);
-    }
+        $dbUser = array_merge($this->db_user, ['username_column' => 'oidc_identifier']);
+        $user   = $this->fetchUserRecord(
+            $this->userInfo[$this->extensionConfiguration->getTokenUserIdentifier()],
+            '',
+            $dbUser
+        ) ?: null;
 
-    /**
-     * @return GenericProvider
-     */
-    protected function getOAuthClient(): GenericProvider
-    {
-        if (!isset($this->oauthClient)) {
-            $this->oauthClient = new GenericProvider(
+        if (!is_array($user)) {
+            // Failed login attempt (no username found)
+            $this->writelog(
+                SystemLogType::LOGIN,
+                SystemLogLoginAction::ATTEMPT,
+                SystemLogErrorClassification::SECURITY_NOTICE,
+                2,
+                'Login-attempt from ###IP###, username \'%s\' not found!!',
+                [$this->login['uname']]
+            );
+            $this->logger->info(
+                'Login-attempt from username \'' . $this->login['uname'] . '\' not found!',
                 [
-                    'clientId'                => $this->extensionConfiguration->getClientId(),
-                    'clientSecret'            => $this->extensionConfiguration->getClientSecret(),
-                    'redirectUri'             => $this->getCallbackUrl(),
-                    'urlAuthorize'            => $this->extensionConfiguration->getEndpointAuthorize(),
-                    'urlAccessToken'          => $this->extensionConfiguration->getEndpointToken(),
-                    'urlResourceOwnerDetails' => $this->extensionConfiguration->getEndpointUserInfo(),
-                    'scopes'                  => GeneralUtility::trimExplode(
-                        ',',
-                        $this->extensionConfiguration->getClientScopes(),
-                        true
-                    ),
+                    'REMOTE_ADDR' => $this->authInfo['REMOTE_ADDR'],
+                ]
+            );
+        } else {
+            $this->logger->debug(
+                'User found',
+                [
+                    $this->db_user['userid_column']   => $user[$this->db_user['userid_column']],
+                    $this->db_user['username_column'] => $user[$this->db_user['username_column']],
                 ]
             );
         }
 
-        return $this->oauthClient;
-    }
-
-    /**
-     * @param int|null $error
-     *
-     * @return string
-     */
-    protected function getCallbackUrl(?int $error = null): string
-    {
-        $callback = GeneralUtility::getIndpEnv('TYPO3_REQUEST_HOST');
-        if ($this->mode === 'getUserBE') {
-            $callback .= '/typo3/?' . (!is_null($error) ? 'error=' . $error : 'login_status=login');
-        }
-        return $callback;
-    }
-
-    /**
-     * This returns the restrictions needed to select the user respecting
-     * enable columns and flags like deleted, hidden, starttime, endtime
-     * and rootLevel
-     *
-     * @return QueryRestrictionContainerInterface
-     */
-    protected function userConstraints(): QueryRestrictionContainerInterface
-    {
-        $restrictionContainer = GeneralUtility::makeInstance(DefaultRestrictionContainer::class);
-
-        $restrictionContainer->removeByType(StartTimeRestriction::class);
-        $restrictionContainer->removeByType(EndTimeRestriction::class);
-
-        if ($this->mode == 'BE') {
-            if ($this->extensionConfiguration->isReEnableBackendUsers()) {
-                $restrictionContainer->removeByType(HiddenRestriction::class);
-            }
-
-            if ($this->extensionConfiguration->isUnDeleteBackendUsers()) {
-                $restrictionContainer->removeByType(DeletedRestriction::class);
-            }
-        }
-
-        return $restrictionContainer;
+        return $user;
     }
 
     /**
@@ -250,7 +165,14 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
      */
     public function authUser(array $user): int
     {
-        if (!isset($user['oidc_identifier']) || (string)$user['oidc_identifier'] === '') {
+        if ($this->login['responsible'] === false) {
+            // Service is not responsible. Check other services.
+            return 100;
+        }
+        if (empty($user['oidc_identifier'])
+            || (string)$user['oidc_identifier']
+               !== $this->userInfo[$this->extensionConfiguration->getTokenUserIdentifier()]) {
+            // Verification failed as identifier does not match. Maybe other services can handle this login.
             return 100;
         }
 
@@ -295,7 +217,7 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
         // Responsible, authentication ok, domain lock ok. Log successful login and return 'auth ok, do NOT check other services'
         $this->writeLogMessage(
             $this->pObj->loginType . ' Authentication successful for username \'%s\'',
-            $user['username']
+            $user[$this->db_user['username_column']]
         );
         return 200;
     }

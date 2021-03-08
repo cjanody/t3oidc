@@ -31,6 +31,12 @@
 			<trans-unit id="endpoint.logout" resname="endpoint.logout">
 				<source>Logout endpoint</source>
 			</trans-unit>
+			<trans-unit id="categories.token" resname="categories.token">
+				<source>Token</source>
+			</trans-unit>
+			<trans-unit id="token.userIdentifier" resname="token.userIdentifier">
+				<source>User identifier : The property of the ID token containing the unique user ID (default: "sub").</source>
+			</trans-unit>
 
 			<trans-unit id="enableBackendAuthentication" resname="enableBackendAuthentication">
 				<source>Backend Authentication : Enable OpenID Connect authentication for the backend.</source>
