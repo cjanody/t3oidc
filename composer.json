@@ -28,7 +28,8 @@
 	"require-dev": {
 		"typo3/coding-standards": "^0.2.0",
 		"typo3/testing-framework": "^4.15 || ^6.6",
-		"phpstan/phpstan": "^0.12.37"
+		"phpstan/phpstan": "^0.12.37",
+		"phpspec/prophecy-phpunit": "^2.0"
 	},
 	"autoload": {
 		"psr-4": {
