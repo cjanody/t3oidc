@@ -112,6 +112,8 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
     }
 
     /**
+     * Find a user
+     *
      * @return array<string,string>|null
      */
     public function getUser(): ?array
@@ -159,9 +161,18 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
     }
 
     /**
-     * @param array<string, mixed> $user
+     * Authenticate a user: Check user identifier if the service is responsible of the authentication and check domain
+     * lock if configured.
      *
-     * @return int
+     * Returns one of the following status codes:
+     *  >= 200: User authenticated successfully. No more checking is needed by other auth services.
+     *  >= 100: User not authenticated; this service is not responsible. Other auth services will be asked.
+     *  > 0:    User authenticated successfully. Other auth services will still be asked.
+     *  <= 0:   Authentication failed, no more checking needed by other auth services.
+     *
+     * @param array<string, mixed> $user User data
+     *
+     * @return int Authentication status code, one of 0, 100, 200
      */
     public function authUser(array $user): int
     {
@@ -188,7 +199,7 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
         }
 
         if (!$isDomainLockMet) {
-            // Password ok, but configured domain lock not met
+            // Configured domain lock not met
             $errorMessage = 'Login-attempt from ###IP###, username \'%s\', locked domain \'%s\' did not match \'%s\'!';
             $this->writeLogMessage(
                 $errorMessage,
