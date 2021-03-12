@@ -25,6 +25,9 @@ use FSG\Oidc\LoginProvider\OpenIDConnectSignInProvider;
 use PDO;
 use TYPO3\CMS\Core\Authentication\AbstractUserAuthentication;
 use TYPO3\CMS\Core\Authentication\LoginType;
+use TYPO3\CMS\Core\Crypto\PasswordHashing\InvalidPasswordHashException;
+use TYPO3\CMS\Core\Crypto\PasswordHashing\PasswordHashFactory;
+use TYPO3\CMS\Core\Crypto\Random;
 use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\Database\Query\QueryBuilder;
 use TYPO3\CMS\Core\Session\Backend\Exception\SessionNotFoundException;
@@ -33,6 +36,7 @@ use TYPO3\CMS\Core\Session\SessionManager;
 use TYPO3\CMS\Core\SysLog\Action\Login as SystemLogLoginAction;
 use TYPO3\CMS\Core\SysLog\Error as SystemLogErrorClassification;
 use TYPO3\CMS\Core\SysLog\Type as SystemLogType;
+use TYPO3\CMS\Core\Utility\ArrayUtility;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 
 /**
@@ -106,7 +110,7 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
     }
 
     /**
-     * @throws Exception
+     * @throws Exception|InvalidPasswordHashException
      */
     protected function handleLogin(): void
     {
@@ -131,7 +135,7 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
      * Insert or update logged in user
      *
      * @return array<string, string> $user
-     * @throws Exception
+     * @throws Exception|InvalidPasswordHashException
      */
     protected function insertOrUpdateUser(): array
     {
@@ -148,7 +152,7 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
                     $this->db_user['username_column'] => $this->userInfo[$this->extensionConfiguration->getTokenUserIdentifier()],
                 ]
             );
-        // $user = $this->insertUser();
+            $user = $this->insertUser();
         } elseif (!empty($user)) {
             if ($this->authInfo['loginType'] == 'BE'
                 && ($user['deleted'] == 0
@@ -185,7 +189,7 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
             'oidc_identifier',
             $query->createNamedParameter(
                 $this->userInfo[$this->extensionConfiguration->getTokenUserIdentifier()],
-                \PDO::PARAM_STR
+                PDO::PARAM_STR
             )
         );
 
@@ -211,10 +215,10 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
         $updated = $this->queryBuilder->update($this->db_user['table'])
                                       ->set('realName', $this->userInfo['name'])
                                       ->set('email', $this->userInfo['email'])
-                                      ->set('deleted', '0', true, \PDO::PARAM_INT)
-                                      ->set('disable', '0', true, \PDO::PARAM_INT)
-                                      ->set('starttime', '0', true, \PDO::PARAM_INT)
-                                      ->set('endtime', (string)$endtime->getTimestamp(), true, \PDO::PARAM_INT)
+                                      ->set('deleted', '0', true, PDO::PARAM_INT)
+                                      ->set('disable', '0', true, PDO::PARAM_INT)
+                                      ->set('starttime', '0', true, PDO::PARAM_INT)
+                                      ->set('endtime', (string)$endtime->getTimestamp(), true, PDO::PARAM_INT)
                                       ->where(
                                           $this->queryBuilder->expr()->eq(
                                               'uid',
@@ -340,11 +344,11 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
                 [$user[$this->db_user['username_column']], $user['lockToDomain'], $queriedDomain]
             );
             $this->logger->info(sprintf(
-                $errorMessage,
-                $user[$this->db_user['username_column']],
-                $user['lockToDomain'],
-                $queriedDomain
-            ));
+                                    $errorMessage,
+                                    $user[$this->db_user['username_column']],
+                                    $user['lockToDomain'],
+                                    $queriedDomain
+                                ));
             // Responsible, authentication ok, but domain lock not ok, do NOT check other services
             return 0;
         }
@@ -355,5 +359,78 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
             $user[$this->db_user['username_column']]
         );
         return 200;
+    }
+
+    /**
+     * @throws InvalidPasswordHashException
+     */
+    public function insertUser(): array
+    {
+        switch ($this->db_user['table']) {
+            case 'fe_users':
+                // $this->insertFeUser();
+                break;
+            case 'be_users':
+                $user = $this->insertBeUser();
+                break;
+            default:
+                $this->logger->error(sprintf('"%s" is not a valid table name.', $this->db_user['table']));
+        }
+        return $user ?? [];
+    }
+
+    /**
+     * Inserts a new backend user
+     *
+     * @throws InvalidPasswordHashException
+     */
+    public function insertBeUser(): array
+    {
+        $defaults = $this->getTcaDefaults();
+        $endtime  = new DateTime('today +3 month');
+
+        $preset = [
+            'pid'             => 0,
+            'tstamp'          => time(),
+            'crdate'          => time(),
+            'disable'         => 0,
+            'endtime'         => $endtime->getTimestamp(),
+            'username'        => $this->userInfo[$this->extensionConfiguration->getTokenUserIdentifier()],
+            'password'        => $this->getPassword(),
+            'email'           => $this->userInfo['email'] ?? '',
+            'oidc_identifier' => $this->userInfo[$this->extensionConfiguration->getTokenUserIdentifier()],
+        ];
+
+        $values = array_merge($defaults, $preset);
+
+        $query  = $this->queryBuilder;
+        $result = $query->insert($this->db_user['table'])->values($values)->execute();
+
+        return $this->fetchUserRecord($preset['oidc_identifier']);
+    }
+
+    protected function getTcaDefaults(): array
+    {
+        $defaults = [];
+        $columns  = $GLOBALS['TCA'][$this->db_user['table']]['columns'] ?? [];
+
+        foreach ($columns as $fieldName => $field) {
+            if (isset($field['config']['default'])) {
+                $defaults[$fieldName] = $field['config']['default'];
+            }
+        }
+
+        return $defaults;
+    }
+
+    /**
+     * @throws InvalidPasswordHashException
+     */
+    protected function getPassword(): string
+    {
+        $saltFactory = GeneralUtility::makeInstance(PasswordHashFactory::class)->getDefaultHashInstance(TYPO3_MODE);
+        $password    = GeneralUtility::makeInstance(Random::class)->generateRandomHexString(50);
+
+        return $saltFactory->getHashedPassword($password);
     }
 }

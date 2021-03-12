@@ -47,6 +47,7 @@ class AuthenticationServiceTest extends FunctionalTestCase
      */
     protected array $beDbUser = [
         'table'            => 'be_users',
+        'username_column'  => 'oidc_identifier',
         'check_pid_clause' => '',
         'enable_clause'    => '',
     ];
@@ -299,5 +300,33 @@ class AuthenticationServiceTest extends FunctionalTestCase
         self::assertSame($endtime->getTimestamp(), $user['endtime']);
         self::assertSame('Foo BAR', $user['realName']);
         self::assertSame('foobar@foobar.com', $user['email']);
+    }
+
+    /**
+     * @test
+     * @throws ReflectionException
+     */
+    public function expectInsertedBEUser(): void
+    {
+        $endtime = new DateTime('today +3 month');
+
+        $reflectionMethod = new ReflectionMethod(AuthenticationService::class, 'insertOrUpdateUser');
+        $reflectionMethod->setAccessible(true);
+
+        // Authentication of a new backend user
+        $this->extensionConfigurationProphesize->isEnableBackendAuthentication()->willReturn(true);
+        $this->authenticationService->_set('extensionConfiguration', $this->extensionConfigurationProphesize->reveal());
+
+        $reflectionProperty = new ReflectionProperty(AuthenticationService::class, 'userInfo');
+        $reflectionProperty->setAccessible(true);
+        $reflectionProperty->setValue(
+            $this->authenticationService,
+            ['sub' => 'NewUser', 'name' => 'New USER', 'email' => 'new@user.com']
+        );
+
+        $user = $reflectionMethod->invoke($this->authenticationService);
+        self::assertSame($endtime->getTimestamp(), $user['endtime']);
+        self::assertSame('New USER', $user['realName']);
+        self::assertSame('new@user.com', $user['email']);
     }
 }
