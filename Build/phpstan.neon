@@ -7,3 +7,7 @@ parameters:
 
   bootstrapFiles:
     - PHPStan/constants.php
+
+includes:
+    - %currentWorkingDirectory%/.Build/vendor/jangregor/phpstan-prophecy/extension.neon
+

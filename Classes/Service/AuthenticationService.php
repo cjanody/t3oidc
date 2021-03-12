@@ -17,10 +17,16 @@ namespace FSG\Oidc\Service;
  * The TYPO3 project - inspiring people to share!
  */
 
+use DateTime;
+use Doctrine\DBAL\Driver\Exception;
+use Doctrine\DBAL\Driver\Result;
 use FSG\Oidc\Domain\Model\Dto\ExtensionConfiguration;
 use FSG\Oidc\LoginProvider\OpenIDConnectSignInProvider;
+use PDO;
 use TYPO3\CMS\Core\Authentication\AbstractUserAuthentication;
 use TYPO3\CMS\Core\Authentication\LoginType;
+use TYPO3\CMS\Core\Database\ConnectionPool;
+use TYPO3\CMS\Core\Database\Query\QueryBuilder;
 use TYPO3\CMS\Core\Session\Backend\Exception\SessionNotFoundException;
 use TYPO3\CMS\Core\Session\Backend\SessionBackendInterface;
 use TYPO3\CMS\Core\Session\SessionManager;
@@ -48,6 +54,11 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
      * @var array<string, string>
      */
     private array $userInfo = [];
+
+    /**
+     * @var QueryBuilder
+     */
+    private QueryBuilder $queryBuilder;
 
     /**
      * AuthenticationService constructor.
@@ -94,6 +105,9 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
         return false;
     }
 
+    /**
+     * @throws Exception
+     */
     protected function handleLogin(): void
     {
         if ($this->login['responsible'] === true) {
@@ -101,7 +115,7 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
                 case 'getUserFE':
                 case 'getUserBE':
                     $this->logger->debug(sprintf('Process auth mode "%s".', $this->mode));
-                    // $this->insertOrUpdateUser();
+                    $this->insertOrUpdateUser();
                     break;
                 case 'authUserFE':
                 case 'authUserBE':
@@ -111,6 +125,114 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
                     $this->logger->notice(sprintf('Undefined mode "%s". Skip.', $this->mode));
             }
         }
+    }
+
+    /**
+     * Insert or update logged in user
+     *
+     * @return array<string, string> $user
+     * @throws Exception
+     */
+    protected function insertOrUpdateUser(): array
+    {
+        $this->queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)
+                                            ->getQueryBuilderForTable($this->db_user['table']);
+
+        $user = $this->fetchUserIfItExists();
+
+        // Insert a new user into database
+        if (empty($user) && !$this->extensionConfiguration->isBackendUserMustExistLocally()) {
+            $this->logger->notice(
+                'Insert new user.',
+                [
+                    $this->db_user['username_column'] => $this->userInfo[$this->extensionConfiguration->getTokenUserIdentifier()],
+                ]
+            );
+        // $user = $this->insertUser();
+        } elseif (!empty($user)) {
+            if ($this->authInfo['loginType'] == 'BE'
+                && ($user['deleted'] == 0
+                    || $this->extensionConfiguration->isUnDeleteBackendUsers())
+                && ($user['disable'] == 0 || $this->extensionConfiguration->isReEnableBackendUsers())) {
+                if (!$this->updateUser($user)) {
+                    $this->logger->error(
+                        'User found but it was not updated!',
+                        [
+                            $this->db_user['userid_column']   => $user[$this->db_user['userid_column']],
+                            $this->db_user['username_column'] => $user[$this->db_user['username_column']],
+                        ]
+                    );
+                }
+            } else {
+                $user = [];
+            }
+        }
+
+        return $user;
+    }
+
+    /**
+     * This returns the logged in user record if it exists locally
+     *
+     * @return array<string, mixed>
+     * @throws Exception
+     */
+    protected function fetchUserIfItExists(): array
+    {
+        $query = $this->queryBuilder;
+        $query->getRestrictions()->removeAll();
+        $constraint = $query->expr()->eq(
+            'oidc_identifier',
+            $query->createNamedParameter(
+                $this->userInfo[$this->extensionConfiguration->getTokenUserIdentifier()],
+                \PDO::PARAM_STR
+            )
+        );
+
+        /** @var Result $result */
+        $result = $query->select('*')
+                        ->from($this->db_user['table'])
+                        ->where($constraint)
+                        ->execute();
+
+        return $result->fetchAssociative() ?: [];
+    }
+
+    /**
+     * This update the logged in user record
+     *
+     * @param array<string, mixed> $user
+     *
+     * @return bool
+     */
+    protected function updateUser(array &$user): bool
+    {
+        $endtime = new DateTime('today +3 month');
+        $updated = $this->queryBuilder->update($this->db_user['table'])
+                                      ->set('realName', $this->userInfo['name'])
+                                      ->set('email', $this->userInfo['email'])
+                                      ->set('deleted', '0', true, \PDO::PARAM_INT)
+                                      ->set('disable', '0', true, \PDO::PARAM_INT)
+                                      ->set('starttime', '0', true, \PDO::PARAM_INT)
+                                      ->set('endtime', (string)$endtime->getTimestamp(), true, \PDO::PARAM_INT)
+                                      ->where(
+                                          $this->queryBuilder->expr()->eq(
+                                              'uid',
+                                              $this->queryBuilder->createNamedParameter($user['uid'], PDO::PARAM_INT)
+                                          )
+                                      )
+                                      ->execute() ? true : false;
+
+        if ($updated) {
+            $user['realName']  = $this->userInfo['name'];
+            $user['email']     = $this->userInfo['email'];
+            $user['starttime'] = 0;
+            $user['endtime']   = $endtime->getTimestamp();
+            $user['deleted']   = 0;
+            $user['disable']   = 0;
+        }
+
+        return $updated;
     }
 
     /**

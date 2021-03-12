@@ -103,9 +103,7 @@ class AuthenticationServiceTest extends UnitTestCase
     public function expect0IfDomainLockDoesNotMatch($authenticationServiceMock)
     {
         /** @var AbstractUserAuthentication | ObjectProphecy $pObjProphecy */
-        $pObjProphecy            = $this->prophesize(AbstractUserAuthentication::class);
-        $pObjProphecy->loginType = 'BE';
-
+        $pObjProphecy = $this->prophesize(AbstractUserAuthentication::class);
         /** @var NullLogger | ObjectProphecy $pObjProphecy */
         $loggerProphecy = $this->prophesize(NullLogger::class);
 
