@@ -18,6 +18,7 @@ namespace FSG\Oidc\Service;
  */
 
 use FSG\Oidc\Domain\Model\Dto\ExtensionConfiguration;
+use FSG\Oidc\LoginProvider\OpenIDConnectSignInProvider;
 use TYPO3\CMS\Core\Authentication\AbstractUserAuthentication;
 use TYPO3\CMS\Core\Authentication\LoginType;
 use TYPO3\CMS\Core\Session\Backend\Exception\SessionNotFoundException;
@@ -69,7 +70,8 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
         parent::initAuth($mode, $loginData, $authInfo, $pObj);
 
         $this->login['responsible'] = false;
-        if ($this->initializeUserInfo()) {
+        if (GeneralUtility::_GP('loginProvider') == OpenIDConnectSignInProvider::LOGIN_PROVIDER
+            && $this->initializeUserInfo()) {
             $this->login['status']      = 'login';
             $this->login['responsible'] = true;
             $this->handleLogin();
