@@ -104,12 +104,16 @@ class OpenIDConnectSignInProvider implements LoginProviderInterface, LoggerAware
             if (isset(GeneralUtility::_GET('oidc')['action'])) {
                 $this->action = GeneralUtility::_GET('oidc')['action'];
             }
-            $this->handleRequest();
+
+            if (!$this->handleRequest()) {
+                $error = 'Unexpected error';
+            }
 
             // Assign variables and OpenID Connect response to view
             $view->assignMultiple([
                                       'oidcError'            => GeneralUtility::_GET('error'),
                                       'oidcErrorDescription' => GeneralUtility::_GET('error_description'),
+                                      'handlingError'        => $error ?? '',
                                       'code'                 => GeneralUtility::_GET('code'),
                                       'userInfo'             => $this->userInfo,
                                   ]);
@@ -131,10 +135,11 @@ class OpenIDConnectSignInProvider implements LoginProviderInterface, LoggerAware
     /**
      * Handle the current request
      *
+     * @return bool
      * @throws SessionNotCreatedException
      * @throws SessionNotUpdatedException
      */
-    protected function handleRequest(): void
+    protected function handleRequest(): bool
     {
         try {
             if ($this->action === LoginType::LOGOUT) {
@@ -179,9 +184,11 @@ class OpenIDConnectSignInProvider implements LoginProviderInterface, LoggerAware
             }
         } catch (InvalidStateException | IdentityProviderException $e) {
             $this->logger->error(sprintf('Error %s: %s', $e->getCode(), $e->getMessage()));
+            return false;
         } catch (SessionNotFoundException $e) {
             // Do nothing, user is not logged in authentication service.
         }
+        return true;
     }
 
     /**

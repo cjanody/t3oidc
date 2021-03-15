@@ -29,6 +29,12 @@
 			<trans-unit id="form.not-logged-in">
 				<source><![CDATA[You are currently <strong>not</strong> logged in to authentication service.]]></source>
 			</trans-unit>
+			<trans-unit id="form.logged-in.handlingError.title">
+				<source>Handling error</source>
+			</trans-unit>
+			<trans-unit id="form.logged-in.handlingError.description">
+				<source>Please try again later.</source>
+			</trans-unit>
 			<trans-unit id="form.logged-in.success.title">
 				<source>Well done!</source>
 			</trans-unit>

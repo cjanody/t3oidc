@@ -15,15 +15,29 @@
                     </div>
                 </f:then>
                 <f:else>
-                    <f:if condition="{code}">
-                        <div class="alert alert-success">
-                            <strong>
+                    <f:if condition="{handlingError}">
+                        <f:then>
+                            <div class="alert alert-danger">
+                                <strong>
+                                    <f:translate
+                                        key="LLL:EXT:t3oidc/Resources/Private/Language/locallang.xlf:form.logged-in.handlingError.title"/>
+                                </strong>
                                 <f:translate
-                                    key="LLL:EXT:t3oidc/Resources/Private/Language/locallang.xlf:form.logged-in.success.title"/>
-                            </strong>
-                            <f:translate
-                                key="LLL:EXT:t3oidc/Resources/Private/Language/locallang.xlf:form.logged-in.success.description"/>
-                        </div>
+                                    key="LLL:EXT:t3oidc/Resources/Private/Language/locallang.xlf:form.logged-in.handlingError.description"/>
+                            </div>
+                        </f:then>
+                        <f:else>
+                            <f:if condition="{code}">
+                                <div class="alert alert-success">
+                                    <strong>
+                                        <f:translate
+                                            key="LLL:EXT:t3oidc/Resources/Private/Language/locallang.xlf:form.logged-in.success.title"/>
+                                    </strong>
+                                    <f:translate
+                                        key="LLL:EXT:t3oidc/Resources/Private/Language/locallang.xlf:form.logged-in.success.description"/>
+                                </div>
+                            </f:if>
+                        </f:else>
                     </f:if>
                 </f:else>
             </f:if>
