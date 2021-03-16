@@ -19,11 +19,9 @@ namespace FSG\Oidc\Service;
 
 use FSG\Oidc\Domain\Model\Dto\ExtensionConfiguration;
 use FSG\Oidc\LoginProvider\OpenIDConnectSignInProvider;
+use Symfony\Component\HttpFoundation\Session\Session;
 use TYPO3\CMS\Core\Authentication\AbstractUserAuthentication;
 use TYPO3\CMS\Core\Authentication\LoginType;
-use TYPO3\CMS\Core\Session\Backend\Exception\SessionNotFoundException;
-use TYPO3\CMS\Core\Session\Backend\SessionBackendInterface;
-use TYPO3\CMS\Core\Session\SessionManager;
 use TYPO3\CMS\Core\SysLog\Action\Login as SystemLogLoginAction;
 use TYPO3\CMS\Core\SysLog\Error as SystemLogErrorClassification;
 use TYPO3\CMS\Core\SysLog\Type as SystemLogType;
@@ -40,9 +38,9 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
     protected ExtensionConfiguration $extensionConfiguration;
 
     /**
-     * @var SessionBackendInterface
+     * @var Session<mixed>
      */
-    private SessionBackendInterface $session;
+    private Session $session;
 
     /**
      * @var array<string, string>
@@ -55,8 +53,7 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
     public function __construct()
     {
         $this->extensionConfiguration = GeneralUtility::makeInstance(ExtensionConfiguration::class);
-        $this->session                = GeneralUtility::makeInstance(SessionManager::class)
-                                                      ->getSessionBackend(TYPO3_MODE);
+        $this->session                = new Session();
     }
 
     /**
@@ -83,12 +80,9 @@ class AuthenticationService extends \TYPO3\CMS\Core\Authentication\Authenticatio
      */
     protected function initializeUserInfo(): bool
     {
-        try {
-            if ($this->userInfo = unserialize($this->session->get('t3oidcOAuthUser')['ses_data'])) {
-                return true;
-            }
-        } catch (SessionNotFoundException $e) {
-            $this->logger->error(sprintf('Error %s: %s', $e->getCode(), $e->getMessage()));
+        if ($this->session->has('t3oidcOAuthUser')
+            && ($this->userInfo = unserialize($this->session->get('t3oidcOAuthUser')))) {
+            return true;
         }
 
         return false;

@@ -29,15 +29,11 @@ use League\OAuth2\Client\Token\AccessToken;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
 use RuntimeException;
+use Symfony\Component\HttpFoundation\Session\Session;
 use TYPO3\CMS\Backend\Controller\LoginController;
 use TYPO3\CMS\Backend\LoginProvider\LoginProviderInterface;
 use TYPO3\CMS\Core\Authentication\LoginType;
 use TYPO3\CMS\Core\Page\PageRenderer;
-use TYPO3\CMS\Core\Session\Backend\Exception\SessionNotCreatedException;
-use TYPO3\CMS\Core\Session\Backend\Exception\SessionNotFoundException;
-use TYPO3\CMS\Core\Session\Backend\Exception\SessionNotUpdatedException;
-use TYPO3\CMS\Core\Session\Backend\SessionBackendInterface;
-use TYPO3\CMS\Core\Session\SessionManager;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Core\Utility\HttpUtility;
 use TYPO3\CMS\Fluid\View\StandaloneView;
@@ -72,9 +68,9 @@ class OpenIDConnectSignInProvider implements LoginProviderInterface, LoggerAware
     protected GenericProvider $oauthClient;
 
     /**
-     * @var SessionBackendInterface
+     * @var Session<mixed>
      */
-    private SessionBackendInterface $session;
+    private Session $session;
 
     /**
      * AuthenticationService constructor.
@@ -82,8 +78,7 @@ class OpenIDConnectSignInProvider implements LoginProviderInterface, LoggerAware
     public function __construct()
     {
         $this->extensionConfiguration = GeneralUtility::makeInstance(ExtensionConfiguration::class);
-        $this->session                = GeneralUtility::makeInstance(SessionManager::class)
-                                                      ->getSessionBackend(TYPO3_MODE);
+        $this->session                = new Session();
     }
 
     /**
@@ -91,7 +86,7 @@ class OpenIDConnectSignInProvider implements LoginProviderInterface, LoggerAware
      * @param PageRenderer    $pageRenderer
      * @param LoginController $loginController
      *
-     * @throws HTTPSConnectionException|SessionNotCreatedException|SessionNotUpdatedException
+     * @throws HTTPSConnectionException
      */
     public function render(StandaloneView $view, PageRenderer $pageRenderer, LoginController $loginController): void
     {
@@ -136,8 +131,6 @@ class OpenIDConnectSignInProvider implements LoginProviderInterface, LoggerAware
      * Handle the current request
      *
      * @return bool
-     * @throws SessionNotCreatedException
-     * @throws SessionNotUpdatedException
      */
     protected function handleRequest(): bool
     {
@@ -145,20 +138,29 @@ class OpenIDConnectSignInProvider implements LoginProviderInterface, LoggerAware
             if ($this->action === LoginType::LOGOUT) {
                 // Logout user from authentication service
                 $this->logger->debug('Logout user.');
+
+                if ($this->session->has('t3oidcOAuthUser')) {
+                    $this->session->remove('t3oidcOAuthUser');
+                }
             } elseif ($this->action === LoginType::LOGIN) {
                 // Login user to authentication service
                 $this->logger->debug('Handle backend login.');
                 $this->authenticateUser();
             } elseif ($providedState = GeneralUtility::_GP('state')) {
                 // Process authentication service response
-                $expectedState = $this->session->get('t3oidcOAuthState')['ses_data'];
-                $this->session->remove('t3oidcOAuthUser');
+                if ($this->session->has('t3oidcOAuthUser')) {
+                    $this->session->remove('t3oidcOAuthUser');
+                }
 
-                if ($expectedState != $providedState) {
-                    throw new InvalidStateException(
-                        'The provided auth state did not match the expected value',
-                        1613752400
-                    );
+                if ($this->session->has('t3oidcOAuthState')) {
+                    $expectedState = $this->session->get('t3oidcOAuthState');
+                    $this->session->remove('t3oidcOAuthState');
+                    if ($expectedState != $providedState) {
+                        throw new InvalidStateException(
+                            'The provided auth state did not match the expected value',
+                            1613752400
+                        );
+                    }
                 }
 
                 if ($code = GeneralUtility::_GP('code')) {
@@ -169,8 +171,7 @@ class OpenIDConnectSignInProvider implements LoginProviderInterface, LoggerAware
                     $this->userInfo = $this->getOAuthClient()->getResourceOwner($accessToken)->toArray();
 
                     if (isset($this->userInfo[$this->extensionConfiguration->getTokenUserIdentifier()])) {
-                        $this->session->remove('t3oidcOAuthState');
-                        $this->session->set('t3oidcOAuthUser', ['ses_data' => serialize($this->userInfo)]);
+                        $this->session->set('t3oidcOAuthUser', serialize($this->userInfo));
                         $this->logger->notice(sprintf(
                             'Found user with OpenID Connect identifier "%s".',
                             $this->userInfo[$this->extensionConfiguration->getTokenUserIdentifier()]
@@ -180,32 +181,28 @@ class OpenIDConnectSignInProvider implements LoginProviderInterface, LoggerAware
                     }
                 }
             } else {
-                $this->userInfo = unserialize($this->session->get('t3oidcOAuthUser')['ses_data']) ?: [];
+                if ($this->session->has('t3oidcOAuthUser')) {
+                    $this->userInfo = unserialize($this->session->get('t3oidcOAuthUser'));
+                }
             }
         } catch (InvalidStateException | IdentityProviderException $e) {
             $this->logger->error(sprintf('Error %s: %s', $e->getCode(), $e->getMessage()));
             return false;
-        } catch (SessionNotFoundException $e) {
-            // Do nothing, user is not logged in authentication service.
         }
         return true;
     }
 
     /**
      * Initialize local session and redirect to the authentication service.
-     *
-     * @throws SessionNotCreatedException
-     * @throws SessionNotUpdatedException
      */
     protected function authenticateUser(): void
     {
         $authorizationUrl = $this->getOAuthClient()->getAuthorizationUrl();
 
-        try {
-            $this->session->get('t3oidcOAuthState');
-            $this->session->update('t3oidcOAuthState', ['ses_data' => $this->getOAuthClient()->getState()]);
-        } catch (SessionNotFoundException $e) {
-            $this->session->set('t3oidcOAuthState', ['ses_data' => $this->getOAuthClient()->getState()]);
+        if ($this->session->has('t3oidcOAuthState')) {
+            $this->session->replace(['t3oidcOAuthState' => $this->getOAuthClient()->getState()]);
+        } else {
+            $this->session->set('t3oidcOAuthState', $this->getOAuthClient()->getState());
         }
 
         HttpUtility::redirect($authorizationUrl);
